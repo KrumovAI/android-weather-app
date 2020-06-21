@@ -5,20 +5,18 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Address
 import android.location.Geocoder
-import androidx.appcompat.app.AppCompatActivity
+import android.location.Location
 import android.os.Bundle
-import android.view.View
 import android.widget.Button
+import android.widget.SearchView
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-
+import com.google.android.gms.location.*
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
-import android.widget.SearchView
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import java.io.IOException
@@ -91,12 +89,15 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
         this.submitButton.setOnClickListener {
-            val intent: Intent = Intent(this, WeatherActivity::class.java).apply {
-                putExtra("latitude", chosenLocation?.latitude)
-                putExtra("longitude", chosenLocation?.longitude)
-            }
 
-            this.startActivity(intent)
+            if (chosenLocation != null) {
+                val intent: Intent = Intent(this, WeatherActivity::class.java).apply {
+                    putExtra("latitude", chosenLocation?.latitude)
+                    putExtra("longitude", chosenLocation?.longitude)
+                }
+
+                this.startActivity(intent)
+            }
         }
     }
 
@@ -154,14 +155,40 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
         val task = this.fusedLocationProviderClient.lastLocation
         task.addOnSuccessListener {
+            if (it == null) {
+                val locationRequest = LocationRequest.create();
+                locationRequest.priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+                locationRequest.numUpdates = 1
+
+                val locationCallback = object : LocationCallback() {
+                    override fun onLocationResult(locationResult: LocationResult?) {
+                        if (locationResult == null) {
+                            return
+                        }
+
+                        for (location in locationResult.locations) {
+                            if (location != null) {
+                                locationSuccessCallback(location)
+                                break
+                            }
+                        }
+                    }
+                }
+
+                this.fusedLocationProviderClient.requestLocationUpdates(locationRequest, locationCallback, null)
+            }
             if (it != null) {
-                this.currentLocation = LatLng(it.latitude, it.longitude)
-
-                val supportMapFragment: SupportMapFragment = this.supportFragmentManager
-                    .findFragmentById(R.id.map) as SupportMapFragment
-
-                supportMapFragment.getMapAsync(this)
+                this.locationSuccessCallback(it)
             }
         }
+    }
+
+    private fun locationSuccessCallback(location: Location) {
+        this.currentLocation = LatLng(location.latitude, location.longitude)
+
+        val supportMapFragment: SupportMapFragment = this.supportFragmentManager
+            .findFragmentById(R.id.map) as SupportMapFragment
+
+        supportMapFragment.getMapAsync(this)
     }
 }
